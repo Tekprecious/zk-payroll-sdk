@@ -29,6 +29,9 @@ export enum CacheNamespace {
 
   /** Idempotency keys and their associated operation results. */
   IDEMPOTENCY = "idempotency",
+
+  /** Payroll configurations and employer-specific settings. */
+  CONFIGURATION = "configuration",
 }
 
 /**

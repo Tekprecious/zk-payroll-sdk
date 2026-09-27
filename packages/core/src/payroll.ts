@@ -6,6 +6,9 @@ import { IProofGenerator, ProofPayload } from "./crypto/IProofGenerator";
 import { PayrollError, PayrollServiceErrorCode, ZkPayrollError } from "./errors";
 import { PaymentParams, PaymentResult } from "./types";
 import { SdkLogger } from "./logging/SdkLogger";
+import type { ServerCacheAdapter } from "./cache/ServerCacheAdapter";
+import { CacheNamespace } from "./cache/types";
+import type { EmployerUpdatedEvent } from "./events/employerUpdated";
 import { redactError } from "./redaction/RedactionEngine";
 import { IdempotencyRegistry, createPaymentIdempotencyKey } from "./core/idempotency";
 import { createPayrollProgressEvent } from "./progress";
@@ -77,7 +80,8 @@ export class PayrollService {
     private readonly proofGenerator: IProofGenerator,
     signer: Keypair | ISigner,
     private readonly network: string = Networks.TESTNET,
-    private readonly logger?: SdkLogger
+    private readonly logger?: SdkLogger,
+    private readonly cache?: ServerCacheAdapter
   ) {
     this.signer = toISigner(signer);
   }
@@ -409,5 +413,50 @@ export class PayrollService {
     options?: ReceiptVerificationOptions
   ): PayrollReceipt {
     return assertValidPayrollReceipt(receipt, options);
+  }
+
+  /**
+   * Invalidates the cached configuration. If an employer address is provided,
+   * you may optionally target just that employer's configuration if your cache
+   * adapter supports it, otherwise this clears the entire CONFIGURATION namespace.
+   */
+  async invalidateConfigurationCache(employerAddress?: string): Promise<void> {
+    if (!this.cache) {
+      this.logger?.debug("invalidateConfigurationCache called but no cache adapter is configured.");
+      return;
+    }
+
+    try {
+      this.logger?.info("invalidating_configuration_cache", { employerAddress });
+      // In a more granular implementation, we might delete a specific key for the employer.
+      // Here we invalidate the entire configuration namespace.
+      await this.cache.clearNamespace(CacheNamespace.CONFIGURATION);
+    } catch (error) {
+      this.logger?.error("configuration_cache_invalidation_failed", {
+        error: error instanceof Error ? redactError(error).message : String(error),
+        employerAddress
+      });
+      // Clear failure handling: we throw a safe ZkPayrollError if invalidation fails, 
+      // avoiding leakage of sensitive values.
+      throw new PayrollError(
+        `Failed to invalidate configuration cache: ${error instanceof Error ? error.message : String(error)}`,
+        PayrollServiceErrorCode.UNKNOWN_ERROR // or a more specific code if available
+      );
+    }
+  }
+
+  /**
+   * Handle an employer_updated event by invalidating the configuration cache.
+   * This provides the authorization/validation point: we only act if the event
+   * is a valid EmployerUpdatedEvent.
+   */
+  async handleEmployerUpdatedEvent(event: EmployerUpdatedEvent): Promise<void> {
+    if (event.type !== "employer_updated" || !event.employer) {
+      this.logger?.warn("invalid_employer_updated_event", { event });
+      return;
+    }
+
+    this.logger?.info("handling_employer_updated_event", { employer: event.employer });
+    await this.invalidateConfigurationCache(event.employer);
   }
 }

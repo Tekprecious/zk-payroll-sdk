@@ -12,3 +12,4 @@ export * from "./auditorRole";
 export * from "./reservations";
 export * from "./treasuryDeposit";
 export * from "./employeeStatus";
+export * from "./employerUpdated";
