@@ -22,7 +22,7 @@ export async function withCancellation<T>(
   }
 
   return new Promise<T>((resolve, reject) => {
-    const onAbort = () => reject(new OperationCancelledError(operationName));
+    const onAbort = () => reject(new OperationCancelledError(operationName, signal.reason));
     signal.addEventListener("abort", onAbort, { once: true });
 
     fn(signal)
@@ -48,7 +48,7 @@ export function cancellableDelay(
 ): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     if (signal?.aborted) {
-      reject(new OperationCancelledError(operationName));
+      reject(new OperationCancelledError(operationName, signal.reason));
       return;
     }
     const timer = setTimeout(() => {
@@ -57,7 +57,7 @@ export function cancellableDelay(
     }, ms);
     const onAbort = () => {
       clearTimeout(timer);
-      reject(new OperationCancelledError(operationName));
+      reject(new OperationCancelledError(operationName, signal?.reason));
     };
     signal?.addEventListener("abort", onAbort, { once: true });
   });

@@ -596,4 +596,15 @@ npm run lint
 
 SDK polling and long-running network operations accept an optional `AbortSignal`, letting callers cancel cleanly. Cancellation rejects with `OperationCancelledError` (code `OPERATION_CANCELLED`), is never retried, and never echoes sensitive payroll values.
 
+When aborting a signal, you can supply an optional cancellation reason code (e.g. `controller.abort("USER_ABORTED")`).
+The SDK supports a closed set of reason codes to ensure sensitive data does not leak into logs:
+- `USER_ABORTED`
+- `TIMEOUT`
+- `NETWORK_ERROR`
+- `APP_BACKGROUNDED`
+- `INSUFFICIENT_FUNDS`
+- `OTHER`
+
+If an unrecognized reason is supplied (or a reason containing sensitive PII), it is automatically sanitized to `"OTHER"`. The validated reason code is available on the error object as `error.reasonCode`.
+
 See `packages/core/src/cancellation/` for the API (`withCancellation`, `cancellableDelay`, `throwIfAborted`, `OperationCancelledError`). Passing no `signal` preserves existing behavior, so this is fully backward compatible.

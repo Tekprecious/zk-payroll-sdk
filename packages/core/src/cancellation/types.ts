@@ -5,12 +5,48 @@
  * other sensitive data — only the stable operation name is included.
  */
 
+/** 
+ * Closed set of safe, non-identifying reason codes for an operation cancellation.
+ * We restrict this list to ensure that sensitive payroll or PII values do not 
+ * leak into logs via user-supplied cancellation text.
+ */
+export const CANCELLATION_REASON_CODES = [
+  "USER_ABORTED",
+  "TIMEOUT",
+  "NETWORK_ERROR",
+  "APP_BACKGROUNDED",
+  "INSUFFICIENT_FUNDS",
+  "OTHER",
+] as const;
+
+export type CancellationReasonCode = typeof CANCELLATION_REASON_CODES[number];
+
+/**
+ * Validates whether a given string is a recognized cancellation reason code.
+ */
+export function isCancellationReasonCode(value: unknown): value is CancellationReasonCode {
+  return typeof value === "string" && (CANCELLATION_REASON_CODES as readonly string[]).includes(value);
+}
+
+/**
+ * Sanitizes a reason into a recognized `CancellationReasonCode`.
+ * Unrecognized reasons become "OTHER", protecting sensitive values.
+ */
+export function sanitizeCancellationReason(reason: unknown): CancellationReasonCode {
+  if (isCancellationReasonCode(reason)) {
+    return reason;
+  }
+  return "OTHER";
+}
+
 export class OperationCancelledError extends Error {
   public readonly code = "OPERATION_CANCELLED";
+  public readonly reasonCode: CancellationReasonCode;
 
-  constructor(operationName: string) {
+  constructor(operationName: string, reason?: unknown) {
     super(`Operation "${operationName}" was cancelled by the caller.`);
     this.name = "OperationCancelledError";
+    this.reasonCode = sanitizeCancellationReason(reason);
   }
 }
 
@@ -32,6 +68,6 @@ export function throwIfAborted(
   operation: string,
 ): void {
   if (signal?.aborted) {
-    throw new OperationCancelledError(operation);
+    throw new OperationCancelledError(operation, signal.reason);
   }
 }

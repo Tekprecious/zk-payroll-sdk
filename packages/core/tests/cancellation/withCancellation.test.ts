@@ -24,9 +24,37 @@ describe("cancellation helpers", () => {
     } catch (e) {
       const err = e as OperationCancelledError;
       expect(err.code).toBe("OPERATION_CANCELLED");
+      expect(err.reasonCode).toBe("OTHER"); // Defaults to OTHER when no reason provided
       // No sensitive values in the message
       expect(err.message).not.toMatch(/salary|amount|recipient|employee/i);
       expect(err.message).toContain("fetchBalance");
+    }
+  });
+
+  it("exposes and validates a documented reason code (main path)", async () => {
+    const controller = new AbortController();
+    controller.abort("TIMEOUT");
+
+    try {
+      await withCancellation("fetchBalance", controller.signal, async () => 1);
+    } catch (e) {
+      const err = e as OperationCancelledError;
+      expect(err.reasonCode).toBe("TIMEOUT");
+    }
+  });
+
+  it("sanitizes an unrecognized reason to 'OTHER' and protects sensitive values (edge case)", async () => {
+    const controller = new AbortController();
+    // A malicious or careless caller might try to abort with sensitive text
+    controller.abort("aborting because salary $5000 failed");
+
+    try {
+      await withCancellation("fetchBalance", controller.signal, async () => 1);
+    } catch (e) {
+      const err = e as OperationCancelledError;
+      expect(err.reasonCode).toBe("OTHER");
+      expect(err.message).not.toContain("salary");
+      expect(err.message).not.toContain("$5000");
     }
   });
 
